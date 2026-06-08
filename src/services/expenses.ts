@@ -23,6 +23,7 @@ function toExpense(row: Record<string, unknown>): Expense {
     sharedAmount: row.shared_amount ? Number(row.shared_amount) : undefined,
     isSimulation: row.is_simulation as boolean | undefined,
     isPaid: row.is_paid as boolean | undefined,
+    subcategory: row.subcategory as string | null | undefined,
     validUntilMonth: row.valid_until_month as number | null | undefined,
     validUntilYear: row.valid_until_year as number | null | undefined,
     notes: row.notes as string | undefined,
@@ -51,6 +52,7 @@ function toRow(data: Partial<Expense>): Record<string, unknown> {
   if (data.sharedAmount !== undefined) row.shared_amount = data.sharedAmount
   if (data.isSimulation !== undefined) row.is_simulation = data.isSimulation
   if (data.isPaid !== undefined) row.is_paid = data.isPaid
+  if (data.subcategory !== undefined) row.subcategory = data.subcategory
   if (data.validUntilMonth !== undefined) row.valid_until_month = data.validUntilMonth
   if (data.validUntilYear !== undefined) row.valid_until_year = data.validUntilYear
   if (data.notes !== undefined) row.notes = data.notes

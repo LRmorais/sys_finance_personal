@@ -114,7 +114,7 @@ export default function Monthly() {
   // ── Fixas: expenses recorrentes visíveis neste mês ───────────────────────
   const recurringExpenses = useMemo(
     () => getMonthExpenses(expenses, selectedMonth, selectedYear)
-            .filter(e => e.type === 'recurring' && !e.isSimulation)
+            .filter(e => e.type === 'recurring' && !e.isSimulation && !e.cardId)
             .slice().sort((a, b) => (a.recurringDay ?? 0) - (b.recurringDay ?? 0)),
     [expenses, selectedMonth, selectedYear]
   )
