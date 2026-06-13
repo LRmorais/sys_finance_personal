@@ -5,7 +5,7 @@ import Badge from '../components/ui/Badge'
 import { formatCurrency } from '../utils/currency'
 import { getMonthIncomes, getMonthExpenses, getTotalIncomes, getTotalExpenses, getCardInvoiceTotal } from '../utils/calculations'
 import { addMonthsToDate } from '../utils/dates'
-import { TrendingUp, TrendingDown, Wallet, CreditCard, Repeat, ArrowUpCircle } from 'lucide-react'
+import { TrendingUp, Wallet, CreditCard, Repeat } from 'lucide-react'
 
 // ─── sub-components ───────────────────────────────────────────────────────────
 

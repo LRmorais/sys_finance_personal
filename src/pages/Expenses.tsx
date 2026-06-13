@@ -35,20 +35,24 @@ export default function Expenses() {
   const [filterSim, setFilterSim] = useState(false)
   const [filterRecurring, setFilterRecurring] = useState(false)
   const [filterInstallment, setFilterInstallment] = useState(false)
+  const [filterCash, setFilterCash] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [deletingBulk, setDeletingBulk] = useState(false)
 
   const monthExpenses = useMemo(() => {
     let list = getMonthExpenses(expenses, selectedMonth, selectedYear)
     if (filterCat) list = list.filter(e => e.category === filterCat)
     if (filterCard) list = list.filter(e => e.cardId === filterCard)
     if (filterSim) list = list.filter(e => e.isSimulation)
-    if (filterRecurring || filterInstallment) {
+    if (filterRecurring || filterInstallment || filterCash) {
       list = list.filter(e =>
         (filterRecurring && e.type === 'recurring') ||
-        (filterInstallment && e.type === 'installment')
+        (filterInstallment && e.type === 'installment') ||
+        (filterCash && e.type === 'cash')
       )
     }
     return list
-  }, [expenses, selectedMonth, selectedYear, filterCat, filterCard, filterSim, filterRecurring, filterInstallment])
+  }, [expenses, selectedMonth, selectedYear, filterCat, filterCard, filterSim, filterRecurring, filterInstallment, filterCash])
 
   const total = getTotalExpenses(monthExpenses)
 
@@ -142,6 +146,34 @@ export default function Expenses() {
     }
   }
 
+  async function handleBulkDelete() {
+    if (!await confirm({
+      title: `Excluir ${selectedIds.size} gasto${selectedIds.size > 1 ? 's' : ''}?`,
+      message: 'Esta ação não pode ser desfeita.',
+      confirmLabel: 'Excluir todos',
+    })) return
+    setDeletingBulk(true)
+    try {
+      await Promise.all([...selectedIds].map(id => deleteExpense(id)))
+      ;[...selectedIds].forEach(id => dispatch({ type: 'DELETE_EXPENSE', payload: id }))
+      addToast('success', `${selectedIds.size} gastos excluídos.`)
+      setSelectedIds(new Set())
+    } catch { addToast('error', 'Erro ao excluir.') }
+    setDeletingBulk(false)
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(s => {
+      const n = new Set(s)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds(s => s.size === monthExpenses.length ? new Set() : new Set(monthExpenses.map(e => e.id)))
+  }
+
   const cardName = (id: string | null) => id ? (cards.find(c => c.id === id)?.name ?? 'Cartão') : 'Débito'
 
   return (
@@ -178,10 +210,23 @@ export default function Expenses() {
           Parceladas
         </label>
         <label className="flex items-center gap-2 text-sm cursor-pointer px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
+          <input type="checkbox" checked={filterCash} onChange={e => setFilterCash(e.target.checked)} className="accent-indigo-500" />
+          À vista
+        </label>
+        <label className="flex items-center gap-2 text-sm cursor-pointer px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
           <input type="checkbox" checked={filterSim} onChange={e => setFilterSim(e.target.checked)} className="accent-amber-500" />
           Simulações
         </label>
       </div>
+
+      {selectedIds.size > 0 && (
+        <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20">
+          <span className="text-sm text-rose-400 font-medium">{selectedIds.size} selecionado{selectedIds.size > 1 ? 's' : ''}</span>
+          <Button variant="danger" size="sm" onClick={handleBulkDelete} loading={deletingBulk}>
+            <Trash2 size={14} /> Excluir selecionados
+          </Button>
+        </div>
+      )}
 
       {monthExpenses.length === 0 ? (
         <div className="card p-12 flex flex-col items-center gap-3 text-center">
@@ -192,14 +237,34 @@ export default function Expenses() {
         </div>
       ) : (
         <div className="card overflow-hidden">
+          {/* Select all header */}
+          <div className="flex items-center gap-3 px-5 py-3 border-b" style={{ borderColor: 'var(--border)', background: 'rgba(255,255,255,0.02)' }}>
+            <input
+              type="checkbox"
+              className="accent-rose-500 w-4 h-4 cursor-pointer"
+              checked={selectedIds.size === monthExpenses.length && monthExpenses.length > 0}
+              onChange={toggleSelectAll}
+            />
+            <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+              {selectedIds.size > 0 ? `${selectedIds.size} de ${monthExpenses.length} selecionados` : 'Selecionar todos'}
+            </span>
+          </div>
+
           {monthExpenses.map((exp, i) => {
             const amount = exp.type === 'installment' ? (exp.installmentAmount ?? 0) : exp.totalAmount
+            const isSelected = selectedIds.has(exp.id)
             return (
               <div
                 key={exp.id}
-                className={`flex items-center gap-3 px-5 py-4 border-b last:border-0 animate-slide-in ${exp.isSimulation ? 'border-l-2 border-l-amber-500/40' : ''}`}
+                className={`flex items-center gap-3 px-5 py-4 border-b last:border-0 animate-slide-in ${exp.isSimulation ? 'border-l-2 border-l-amber-500/40' : ''} ${isSelected ? 'bg-rose-500/5' : ''}`}
                 style={{ borderColor: 'var(--border)', animationDelay: `${i * 30}ms` }}
               >
+                <input
+                  type="checkbox"
+                  className="accent-rose-500 w-4 h-4 cursor-pointer shrink-0"
+                  checked={isSelected}
+                  onChange={() => toggleSelect(exp.id)}
+                />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-medium text-sm truncate">{exp.description}</p>

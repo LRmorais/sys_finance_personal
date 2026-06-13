@@ -14,6 +14,8 @@ import Settings from './pages/Settings'
 import Monthly from './pages/Monthly'
 import Checking from './pages/Checking'
 
+
+
 function ProtectedRoutes() {
   const { state } = useApp()
   if (state.loading) return <LoadingScreen />
