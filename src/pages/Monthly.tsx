@@ -5,7 +5,7 @@ import Badge from '../components/ui/Badge'
 import { formatCurrency } from '../utils/currency'
 import { getMonthIncomes, getMonthExpenses, getTotalIncomes, getTotalExpenses, getCardInvoiceTotal } from '../utils/calculations'
 import { addMonthsToDate } from '../utils/dates'
-import { TrendingUp, TrendingDown, Wallet, CreditCard, Repeat, ArrowUpCircle } from 'lucide-react'
+import { TrendingUp, Wallet, CreditCard, Repeat } from 'lucide-react'
 
 // ─── sub-components ───────────────────────────────────────────────────────────
 
@@ -114,7 +114,7 @@ export default function Monthly() {
   // ── Fixas: expenses recorrentes visíveis neste mês ───────────────────────
   const recurringExpenses = useMemo(
     () => getMonthExpenses(expenses, selectedMonth, selectedYear)
-            .filter(e => e.type === 'recurring' && !e.isSimulation)
+            .filter(e => e.type === 'recurring' && !e.isSimulation && !e.cardId)
             .slice().sort((a, b) => (a.recurringDay ?? 0) - (b.recurringDay ?? 0)),
     [expenses, selectedMonth, selectedYear]
   )

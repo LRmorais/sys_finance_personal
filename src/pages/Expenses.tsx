@@ -9,21 +9,14 @@ import CurrencyInput from '../components/ui/CurrencyInput'
 import { formatCurrency } from '../utils/currency'
 import { getMonthExpenses, getTotalExpenses, buildInstallments } from '../utils/calculations'
 import { calculateBillingMonth } from '../utils/dates'
-import { createExpense, createExpensesBatch, updateExpense, deleteExpense } from '../services/expenses'
+import { createExpense, createExpensesBatch, updateExpense, deleteExpense, deleteExpensesByParent } from '../services/expenses'
 import { Expense, ExpenseCategory } from '../types'
+import { CATEGORIES, categoryLabel, subcategoriesFor } from '../utils/categories'
 import { Plus, Trash2, Pencil, Receipt, AlertTriangle } from 'lucide-react'
-
-const CATEGORIES: { value: ExpenseCategory; label: string }[] = [
-  { value: 'moradia', label: 'Moradia' }, { value: 'alimentacao', label: 'Alimentação' },
-  { value: 'transporte', label: 'Transporte' }, { value: 'saude', label: 'Saúde' },
-  { value: 'educacao', label: 'Educação' }, { value: 'lazer', label: 'Lazer' },
-  { value: 'vestuario', label: 'Vestuário' }, { value: 'viagem', label: 'Viagem' },
-  { value: 'servicos', label: 'Serviços' }, { value: 'familiar', label: 'Familiar' },
-  { value: 'outros', label: 'Outros' },
-]
 
 const emptyForm = {
   description: '', totalAmount: 0, cardId: '', category: 'outros' as ExpenseCategory,
+  subcategory: '',
   type: 'cash' as 'cash' | 'installment' | 'recurring',
   totalInstallments: 2, recurringDay: 1, purchaseDate: new Date().toISOString().split('T')[0],
   isShared: false, sharedWith: '', sharedAmount: 0, isSimulation: false, notes: '',
@@ -40,14 +33,26 @@ export default function Expenses() {
   const [filterCat, setFilterCat] = useState<ExpenseCategory | ''>('')
   const [filterCard, setFilterCard] = useState('')
   const [filterSim, setFilterSim] = useState(false)
+  const [filterRecurring, setFilterRecurring] = useState(false)
+  const [filterInstallment, setFilterInstallment] = useState(false)
+  const [filterCash, setFilterCash] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [deletingBulk, setDeletingBulk] = useState(false)
 
   const monthExpenses = useMemo(() => {
     let list = getMonthExpenses(expenses, selectedMonth, selectedYear)
     if (filterCat) list = list.filter(e => e.category === filterCat)
     if (filterCard) list = list.filter(e => e.cardId === filterCard)
     if (filterSim) list = list.filter(e => e.isSimulation)
+    if (filterRecurring || filterInstallment || filterCash) {
+      list = list.filter(e =>
+        (filterRecurring && e.type === 'recurring') ||
+        (filterInstallment && e.type === 'installment') ||
+        (filterCash && e.type === 'cash')
+      )
+    }
     return list
-  }, [expenses, selectedMonth, selectedYear, filterCat, filterCard, filterSim])
+  }, [expenses, selectedMonth, selectedYear, filterCat, filterCard, filterSim, filterRecurring, filterInstallment, filterCash])
 
   const total = getTotalExpenses(monthExpenses)
 
@@ -56,7 +61,8 @@ export default function Expenses() {
     setEditing(exp)
     setForm({
       description: exp.description, totalAmount: exp.totalAmount, cardId: exp.cardId ?? '',
-      category: exp.category, type: exp.type, totalInstallments: exp.totalInstallments ?? 2,
+      category: exp.category, subcategory: exp.subcategory ?? '',
+      type: exp.type, totalInstallments: exp.totalInstallments ?? 2,
       recurringDay: exp.recurringDay ?? 1, purchaseDate: exp.purchaseDate,
       isShared: exp.isShared ?? false, sharedWith: exp.sharedWith ?? '',
       sharedAmount: exp.sharedAmount ?? 0, isSimulation: exp.isSimulation ?? false, notes: exp.notes ?? '',
@@ -74,13 +80,19 @@ export default function Expenses() {
         ? calculateBillingMonth(purchaseDate, card.closingDay)
         : { month: selectedMonth, year: selectedYear }
 
+      const installmentAmount = editing?.type === 'installment' && editing.totalInstallments
+        ? form.totalAmount / editing.totalInstallments
+        : undefined
+
       const base = {
         userId: user!.id, description: form.description, totalAmount: form.totalAmount,
-        cardId: form.cardId || null, category: form.category, type: form.type,
-        purchaseDate: form.purchaseDate, billingMonth: bm, billingYear: by,
+        cardId: form.cardId || null, category: form.category,
+        subcategory: form.subcategory || undefined,
+        type: form.type, purchaseDate: form.purchaseDate, billingMonth: bm, billingYear: by,
         isShared: form.isShared, sharedWith: form.sharedWith || undefined,
         sharedAmount: form.sharedAmount || undefined, isSimulation: form.isSimulation,
         notes: form.notes || undefined, recurringDay: form.type === 'recurring' ? form.recurringDay : undefined,
+        installmentAmount,
       }
 
       if (editing) {
@@ -106,22 +118,63 @@ export default function Expenses() {
 
   async function handleDelete(exp: Expense) {
     if (exp.type === 'installment' && exp.parentId) {
-      if (!await confirm({
+      const result = await confirm({
         title: 'Excluir parcela?',
-        message: `Parcela ${exp.currentInstallment}/${exp.totalInstallments}. Apenas esta parcela será removida.`,
-        confirmLabel: 'Excluir esta parcela',
-      })) return
-    } else if (!await confirm({ title: 'Excluir gasto?', message: 'Esta ação não pode ser desfeita.' })) return
+        message: `Parcela ${exp.currentInstallment}/${exp.totalInstallments}.`,
+        confirmLabel: 'Só esta parcela',
+        extra: { label: 'Todas as parcelas' },
+      })
+      if (!result) return
+      try {
+        if (result === 'extra') {
+          dispatch({ type: 'DELETE_EXPENSES_BY_PARENT', payload: exp.parentId })
+          await deleteExpensesByParent(exp.parentId)
+          addToast('success', 'Todas as parcelas excluídas.')
+        } else {
+          dispatch({ type: 'DELETE_EXPENSE', payload: exp.id })
+          await deleteExpense(exp.id)
+          addToast('success', 'Parcela excluída.')
+        }
+      } catch { addToast('error', 'Erro ao excluir.') }
+    } else {
+      if (!await confirm({ title: 'Excluir gasto?', message: 'Esta ação não pode ser desfeita.' })) return
+      try {
+        dispatch({ type: 'DELETE_EXPENSE', payload: exp.id })
+        await deleteExpense(exp.id)
+        addToast('success', 'Gasto excluído.')
+      } catch { addToast('error', 'Erro ao excluir.') }
+    }
+  }
 
+  async function handleBulkDelete() {
+    if (!await confirm({
+      title: `Excluir ${selectedIds.size} gasto${selectedIds.size > 1 ? 's' : ''}?`,
+      message: 'Esta ação não pode ser desfeita.',
+      confirmLabel: 'Excluir todos',
+    })) return
+    setDeletingBulk(true)
     try {
-      dispatch({ type: 'DELETE_EXPENSE', payload: exp.id })
-      await deleteExpense(exp.id)
-      addToast('success', 'Gasto excluído.')
+      await Promise.all([...selectedIds].map(id => deleteExpense(id)))
+      ;[...selectedIds].forEach(id => dispatch({ type: 'DELETE_EXPENSE', payload: id }))
+      addToast('success', `${selectedIds.size} gastos excluídos.`)
+      setSelectedIds(new Set())
     } catch { addToast('error', 'Erro ao excluir.') }
+    setDeletingBulk(false)
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(s => {
+      const n = new Set(s)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds(s => s.size === monthExpenses.length ? new Set() : new Set(monthExpenses.map(e => e.id)))
   }
 
   const cardName = (id: string | null) => id ? (cards.find(c => c.id === id)?.name ?? 'Cartão') : 'Débito'
-  const categoryLabel = (cat: ExpenseCategory) => CATEGORIES.find(c => c.value === cat)?.label ?? cat
 
   return (
     <div className="space-y-6">
@@ -149,10 +202,31 @@ export default function Expenses() {
           {cards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <label className="flex items-center gap-2 text-sm cursor-pointer px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
+          <input type="checkbox" checked={filterRecurring} onChange={e => setFilterRecurring(e.target.checked)} className="accent-emerald-500" />
+          Recorrentes
+        </label>
+        <label className="flex items-center gap-2 text-sm cursor-pointer px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
+          <input type="checkbox" checked={filterInstallment} onChange={e => setFilterInstallment(e.target.checked)} className="accent-blue-500" />
+          Parceladas
+        </label>
+        <label className="flex items-center gap-2 text-sm cursor-pointer px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
+          <input type="checkbox" checked={filterCash} onChange={e => setFilterCash(e.target.checked)} className="accent-indigo-500" />
+          À vista
+        </label>
+        <label className="flex items-center gap-2 text-sm cursor-pointer px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
           <input type="checkbox" checked={filterSim} onChange={e => setFilterSim(e.target.checked)} className="accent-amber-500" />
           Simulações
         </label>
       </div>
+
+      {selectedIds.size > 0 && (
+        <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20">
+          <span className="text-sm text-rose-400 font-medium">{selectedIds.size} selecionado{selectedIds.size > 1 ? 's' : ''}</span>
+          <Button variant="danger" size="sm" onClick={handleBulkDelete} loading={deletingBulk}>
+            <Trash2 size={14} /> Excluir selecionados
+          </Button>
+        </div>
+      )}
 
       {monthExpenses.length === 0 ? (
         <div className="card p-12 flex flex-col items-center gap-3 text-center">
@@ -163,14 +237,34 @@ export default function Expenses() {
         </div>
       ) : (
         <div className="card overflow-hidden">
+          {/* Select all header */}
+          <div className="flex items-center gap-3 px-5 py-3 border-b" style={{ borderColor: 'var(--border)', background: 'rgba(255,255,255,0.02)' }}>
+            <input
+              type="checkbox"
+              className="accent-rose-500 w-4 h-4 cursor-pointer"
+              checked={selectedIds.size === monthExpenses.length && monthExpenses.length > 0}
+              onChange={toggleSelectAll}
+            />
+            <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+              {selectedIds.size > 0 ? `${selectedIds.size} de ${monthExpenses.length} selecionados` : 'Selecionar todos'}
+            </span>
+          </div>
+
           {monthExpenses.map((exp, i) => {
             const amount = exp.type === 'installment' ? (exp.installmentAmount ?? 0) : exp.totalAmount
+            const isSelected = selectedIds.has(exp.id)
             return (
               <div
                 key={exp.id}
-                className={`flex items-center gap-3 px-5 py-4 border-b last:border-0 animate-slide-in ${exp.isSimulation ? 'border-l-2 border-l-amber-500/40' : ''}`}
+                className={`flex items-center gap-3 px-5 py-4 border-b last:border-0 animate-slide-in ${exp.isSimulation ? 'border-l-2 border-l-amber-500/40' : ''} ${isSelected ? 'bg-rose-500/5' : ''}`}
                 style={{ borderColor: 'var(--border)', animationDelay: `${i * 30}ms` }}
               >
+                <input
+                  type="checkbox"
+                  className="accent-rose-500 w-4 h-4 cursor-pointer shrink-0"
+                  checked={isSelected}
+                  onChange={() => toggleSelect(exp.id)}
+                />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-medium text-sm truncate">{exp.description}</p>
@@ -180,7 +274,7 @@ export default function Expenses() {
                     {exp.isShared && <Badge variant="muted">Compartilhado</Badge>}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-                    <span>{categoryLabel(exp.category)}</span>
+                    <span>{categoryLabel(exp.category)}{exp.subcategory ? ` · ${exp.subcategory}` : ''}</span>
                     <span>·</span>
                     <span>{cardName(exp.cardId)}</span>
                   </div>
@@ -214,10 +308,19 @@ export default function Expenses() {
             </div>
             <div>
               <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Categoria</label>
-              <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as ExpenseCategory }))} className="w-full px-3 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer">
+              <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as ExpenseCategory, subcategory: '' }))} className="w-full px-3 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer">
                 {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </div>
+            {subcategoriesFor(form.category).length > 0 && (
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Subcategoria</label>
+                <select value={form.subcategory} onChange={e => setForm(f => ({ ...f, subcategory: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer">
+                  <option value="">— Sem subcategoria —</option>
+                  {subcategoriesFor(form.category).map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Cartão</label>
               <select value={form.cardId} onChange={e => setForm(f => ({ ...f, cardId: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer">

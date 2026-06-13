@@ -117,7 +117,7 @@ export default function Checking() {
 
   const recurringExpenses = useMemo(
     () => getMonthExpenses(expenses, selectedMonth, selectedYear)
-            .filter(e => e.type === 'recurring' && !e.isSimulation),
+            .filter(e => e.type === 'recurring' && !e.isSimulation && !e.cardId),
     [expenses, selectedMonth, selectedYear]
   )
 

@@ -1,14 +1,11 @@
 export type ExpenseCategory =
-  | 'moradia'
-  | 'alimentacao'
+  | 'casa'
+  | 'carro'
   | 'transporte'
   | 'saude'
-  | 'educacao'
   | 'lazer'
-  | 'vestuario'
   | 'viagem'
   | 'servicos'
-  | 'familiar'
   | 'outros'
 
 export interface Income {
@@ -62,6 +59,7 @@ export interface Expense {
   sharedAmount?: number
   isSimulation?: boolean
   isPaid?: boolean
+  subcategory?: string | null
   // limite de validade para recorrentes
   validUntilMonth?: number | null
   validUntilYear?: number | null

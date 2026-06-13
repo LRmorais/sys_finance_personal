@@ -6,32 +6,28 @@ interface ConfirmOptions {
   message?: string
   confirmLabel?: string
   variant?: 'danger' | 'primary'
+  extra?: { label: string }
 }
 
-type ConfirmFn = (opts: ConfirmOptions) => Promise<boolean>
+type ConfirmResult = 'confirm' | 'extra' | false
+type ConfirmFn = (opts: ConfirmOptions) => Promise<ConfirmResult>
 
 const ConfirmContext = createContext<ConfirmFn>(() => Promise.resolve(false))
 
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [open, setOpen]       = useState(false)
   const [opts, setOpts]       = useState<ConfirmOptions>({ title: '' })
-  const resolveRef            = useRef<(v: boolean) => void>(() => {})
+  const resolveRef            = useRef<(v: ConfirmResult) => void>(() => {})
 
-  const confirm = useCallback((options: ConfirmOptions): Promise<boolean> => {
+  const confirm = useCallback((options: ConfirmOptions): Promise<ConfirmResult> => {
     setOpts(options)
     setOpen(true)
     return new Promise(resolve => { resolveRef.current = resolve })
   }, [])
 
-  function handleConfirm() {
-    setOpen(false)
-    resolveRef.current(true)
-  }
-
-  function handleClose() {
-    setOpen(false)
-    resolveRef.current(false)
-  }
+  function handleConfirm() { setOpen(false); resolveRef.current('confirm') }
+  function handleExtra()   { setOpen(false); resolveRef.current('extra')   }
+  function handleClose()   { setOpen(false); resolveRef.current(false)     }
 
   return (
     <ConfirmContext.Provider value={confirm}>
@@ -44,6 +40,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
         message={opts.message}
         confirmLabel={opts.confirmLabel}
         variant={opts.variant ?? 'danger'}
+        extra={opts.extra ? { label: opts.extra.label, onClick: handleExtra } : undefined}
       />
     </ConfirmContext.Provider>
   )
