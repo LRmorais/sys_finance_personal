@@ -8,12 +8,7 @@ import { getMonthIncomes, getMonthExpenses, getTotalIncomes, getTotalExpenses, g
 import { addMonthsToDate, formatMonthYear, MONTHS_PT } from '../utils/dates'
 import { AlertTriangle, TrendingUp, TrendingDown, Wallet, PiggyBank } from 'lucide-react'
 import { ExpenseCategory } from '../types'
-
-const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
-  moradia: 'Moradia', alimentacao: 'Alimentação', transporte: 'Transporte',
-  saude: 'Saúde', educacao: 'Educação', lazer: 'Lazer', vestuario: 'Vestuário',
-  viagem: 'Viagem', servicos: 'Serviços', familiar: 'Familiar', outros: 'Outros',
-}
+import { categoryLabel } from '../utils/categories'
 
 function SummaryCard({ label, value, icon: Icon, color, sub }: {
   label: string; value: string; icon: any; color: string; sub?: string
@@ -97,7 +92,7 @@ export default function Dashboard() {
       map[e.category] = (map[e.category] ?? 0) + amount
     })
     return Object.entries(map)
-      .map(([cat, value]) => ({ name: CATEGORY_LABELS[cat as ExpenseCategory] ?? cat, value }))
+      .map(([cat, value]) => ({ name: categoryLabel(cat as ExpenseCategory), value }))
       .sort((a, b) => b.value - a.value)
   }, [monthExpenses])
 
