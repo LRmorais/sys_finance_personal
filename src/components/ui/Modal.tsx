@@ -28,10 +28,10 @@ export default function Modal({ open, onClose, title, children, size = 'md' }: P
       onClick={onClose}
     >
       <div
-        className={`card w-full ${sizes[size]} animate-fade-in`}
+        className={`card w-full ${sizes[size]} flex flex-col max-h-[90vh] animate-fade-in`}
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex items-center justify-between p-5 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
           <h2 className="font-display text-xl">{title}</h2>
           <button
             onClick={onClose}
@@ -41,7 +41,7 @@ export default function Modal({ open, onClose, title, children, size = 'md' }: P
             <X size={18} />
           </button>
         </div>
-        <div className="p-5">{children}</div>
+        <div className="p-5 overflow-y-auto">{children}</div>
       </div>
     </div>
   )

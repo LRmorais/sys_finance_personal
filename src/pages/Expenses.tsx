@@ -8,7 +8,7 @@ import Badge from '../components/ui/Badge'
 import CurrencyInput from '../components/ui/CurrencyInput'
 import { formatCurrency } from '../utils/currency'
 import { getMonthExpenses, getTotalExpenses, buildInstallments } from '../utils/calculations'
-import { calculateBillingMonth } from '../utils/dates'
+import { calculateBillingMonth, formatDate } from '../utils/dates'
 import { createExpense, createExpensesBatch, updateExpense, deleteExpense, deleteExpensesByParent } from '../services/expenses'
 import { Expense, ExpenseCategory } from '../types'
 import { CATEGORIES, categoryLabel, subcategoriesFor } from '../utils/categories'
@@ -51,7 +51,7 @@ export default function Expenses() {
         (filterCash && e.type === 'cash')
       )
     }
-    return list
+    return list.sort((a, b) => (b.purchaseDate ?? '').localeCompare(a.purchaseDate ?? ''))
   }, [expenses, selectedMonth, selectedYear, filterCat, filterCard, filterSim, filterRecurring, filterInstallment, filterCash])
 
   const total = getTotalExpenses(monthExpenses)
@@ -277,6 +277,7 @@ export default function Expenses() {
                     <span>{categoryLabel(exp.category)}{exp.subcategory ? ` · ${exp.subcategory}` : ''}</span>
                     <span>·</span>
                     <span>{cardName(exp.cardId)}</span>
+                    {exp.purchaseDate && <><span>·</span><span className="px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-emerald-500/10 text-emerald-400">{formatDate(exp.purchaseDate)}</span></>}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
